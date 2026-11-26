@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Menu Coffee Shop</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #fff8e1;
+      font-family: Georgia, serif;
+      color: #3e2723;
+    }
+
+    /* Bagian atas (hero) */
+    .hero {
+      background: linear-gradient(135deg, #3e2723, #6d4c41);
+      color: #fff8e1;
+      text-align: center;
+      padding: 50px 20px 70px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 2.4rem; }
+    .hero p { margin: 0; color: #ffcc80; }
+
+    /* Kotak kontrol (cari + urutkan) */
+    .controls {
+      max-width: 960px;
+      margin: -35px auto 20px;
+      padding: 0 20px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .controls input, .controls select {
+      padding: 14px 18px;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 1rem;
+      box-shadow: 0 4px 12px rgba(62, 39, 35, 0.2);
+    }
+    .controls input { flex: 1; min-width: 200px; }
+
+    /* Tombol filter kategori */
+    .filters {
+      max-width: 960px;
+      margin: 0 auto 10px;
+      padding: 0 20px;
+      text-align: center;
+    }
+    .filters button {
+      margin: 4px;
+      padding: 8px 20px;
+      border: 2px solid #6d4c41;
+      background: #fff;
+      color: #3e2723;
+      border-radius: 20px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      text-transform: capitalize;
+      cursor: pointer;
+    }
+    .filters button.active { background: #6d4c41; color: #fff8e1; }
+
+    .count { text-align: center; color: #6d4c41; margin: 10px 0 20px; }
+
+    /* Kartu menu */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 20px;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .card {
+      position: relative;
+      background: #fff;
+      border-radius: 16px;
+      padding: 26px 20px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(62, 39, 35, 0.15);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 10px 20px rgba(62, 39, 35, 0.25);
+    }
+    .card.habis { opacity: 0.55; }
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.6rem;
+      border-radius: 50%;
+      background: #ffe0b2;
+    }
+    .card.tea .icon { background: #dcedc8; }
+    .card.snack .icon { background: #f8bbd0; }
+    .card h2 { margin: 0 0 8px; font-size: 1.2rem; }
+    .badge {
+      display: inline-block;
+      padding: 3px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      background: #ffcc80;
+      text-transform: capitalize;
+    }
+    .card.tea .badge { background: #c5e1a5; }
+    .card.snack .badge { background: #f48fb1; }
+    .price { font-size: 1.4rem; font-weight: bold; margin: 14px 0 6px; }
+    .stock { font-size: 0.9rem; color: #2e7d32; }
+    .stock.low { color: #e65100; font-weight: bold; }
+    .stock.out { color: #c62828; font-weight: bold; }
+
+    .empty { grid-column: 1 / -1; text-align: center; padding: 40px 0; }
+    .back { display: block; text-align: center; margin: 36px 0; color: #6d4c41; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>☕ Menu Coffee Shop</h1>
+    <p>Dipilih dengan cinta, diseduh dengan hangat</p>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="search" placeholder="🔍 Cari menu...">
+    <select id="sort">
+      <option value="default">Urutan awal</option>
+      <option value="asc">Harga: termurah</option>
+      <option value="desc">Harga: termahal</option>
+    </select>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <p class="count" id="count"></p>
+  <div class="grid" id="grid">Memuat menu...</div>
+  <a class="back" href="/">← Kembali ke beranda</a>
+
+  <script>
+    const icons = { coffee: '☕', tea: '🍵', snack: '🥐' };
+    let allMenus = [];
+    let activeCategory = 'semua';
+
+    // Mencegah teks berisi tag HTML dijalankan sebagai kode
+    function esc(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Label stok: habis, menipis, atau tersedia
+    function stockLabel(stock) {
+      if (stock === 0) return '<div class="stock out">Habis</div>';
+      if (stock <= 20) return `<div class="stock low">Stok menipis: ${esc(stock)}</div>`;
+      return `<div class="stock">Stok: ${esc(stock)}</div>`;
+    }
+
+    // Saring + urutkan data sesuai pilihan pengguna, lalu tampilkan
+    function render() {
+      const keyword = document.getElementById('search').value.toLowerCase();
+      const sort = document.getElementById('sort').value;
+
+      let list = allMenus.filter((m) =>
+        (activeCategory === 'semua' || m.category === activeCategory) &&
+        m.name.toLowerCase().includes(keyword)
+      );
+
+      if (sort === 'asc') list = [...list].sort((a, b) => a.price - b.price);
+      if (sort === 'desc') list = [...list].sort((a, b) => b.price - a.price);
+
+      document.getElementById('count').textContent = `${list.length} menu ditemukan`;
+
+      const grid = document.getElementById('grid');
+      if (list.length === 0) {
+        grid.innerHTML = '<p class="empty">😢 Menu tidak ditemukan.</p>';
+        return;
+      }
+
+      grid.innerHTML = list.map((m) => `
+        <div class="card ${esc(m.category)} ${m.stock === 0 ? 'habis' : ''}">
+          <div class="icon">${icons[m.category] || '🍽️'}</div>
+          <span class="badge">${esc(m.category)}</span>
+          <h2>${esc(m.name)}</h2>
+          <div class="price">Rp ${Number(m.price).toLocaleString('id-ID')}</div>
+          ${stockLabel(m.stock)}
+        </div>
+      `).join('');
+    }
+
+    // Buat tombol filter dari kategori yang ada di data, lengkap dengan jumlahnya
+    function renderFilters() {
+      const categories = ['semua', ...new Set(allMenus.map((m) => m.category))];
+      const box = document.getElementById('filters');
+
+      box.innerHTML = categories.map((c) => {
+        const total = c === 'semua'
+          ? allMenus.length
+          : allMenus.filter((m) => m.category === c).length;
+        return `<button data-cat="${esc(c)}" class="${c === activeCategory ? 'active' : ''}">${esc(c)} (${total})</button>`;
+      }).join('');
+
+      box.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          activeCategory = btn.dataset.cat;
+          renderFilters();
+          render();
+        });
+      });
+    }
+
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('sort').addEventListener('change', render);
+
+    // Ambil data dari API milik sendiri
+    fetch('/menus')
+      .then((res) => res.json())
+      .then((menus) => {
+        allMenus = menus;
+        renderFilters();
+        render();
+      })
+      .catch(() => {
+        document.getElementById('grid').textContent = 'Gagal memuat menu.';
+      });
+  </script>
+</body>
+</html>
